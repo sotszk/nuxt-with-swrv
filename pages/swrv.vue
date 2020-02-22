@@ -2,8 +2,10 @@
   <div class="max-w-sm max-auto p-6">
     <div class="text-xl font-bold mb-4">{{ title }}</div>
     <div>
-      <button class="btn btn-blue" @click="() => (count += 1)">+</button
-      ><span class="ml-4">{{ count }}</span>
+      <button class="btn btn-blue" @click="() => $store.commit('increment')">
+        +</button
+      ><span class="ml-4">{{ $store.state.counter }}</span>
+      <span>{{ $store.getters.double }}</span>
     </div>
     <nuxt-link
       class="inline-block text-blue-400 hover:text-blue-600 my-4"
@@ -21,13 +23,19 @@
 
     <div class="mt-4">
       <p v-if="loading" class="text-md text-teal-700">Loading...</p>
-      <p v-if="responseData">{{ JSON.stringify(responseData) }}</p>
+      <p v-if="responseData">{{ responseData.description }}</p>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, watch } from '@vue/composition-api'
+import {
+  ref,
+  onMounted,
+  onUnmounted,
+  watch,
+  computed,
+} from '@vue/composition-api'
 import { useSwr } from './hooks/useSwr'
 
 const useHello = () => {
@@ -69,23 +77,55 @@ const useSample = () => {
   }
 }
 
+const createStoreCache = (store, ttl = 0) => {
+  if (ttl) {
+    store.commit('setTimeToLive', ttl)
+  }
+
+  return {
+    get(key, ttl) {
+      store.dispatch('shift', ttl)
+      return store.getters.getData(key)
+    },
+    set(key, value) {
+      store.commit('setData', { key, value })
+    },
+  }
+}
+
 export default {
   name: 'Swrv',
 
-  setup() {
+  setup(_, { root }) {
     const {
       data: responseData,
       error: responseError,
       isValidating: loading,
       revalidate,
-    } = useSwr('https://qiita.com/api/v2/schema', (url) =>
-      fetch(url).then((res) => res.json())
+      _cache,
+      _promisesCache,
+    } = useSwr(
+      'https://qiita.com/api/v2/schema',
+      (url) => fetch(url).then((res) => res.json()),
+      {
+        onError: () => console.log('error です'),
+        ttl: 360000,
+        cache: createStoreCache(root.$store, 360000),
+      }
     )
-    // const { hello, count } = useSample()
+    // const { hello, count } = useSfample()
+
+    // watch(
+    //   () => loading.value,
+    //   () => {
+    //     console.log('dataCache', _cache)
+    //     console.log('promisesCache', _promisesCache)
+    //   },
+    //   { lazy: true }
+    // )
 
     const data = {
       title: ref('Hello world'),
-      count: ref(0),
       responseData,
       responseError,
       loading,

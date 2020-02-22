@@ -23,6 +23,31 @@ const isDocumentVisible = () => {
   return true
 }
 
+export const mutate = async (key, res, cache = dataCache) => {
+  let data
+  let error
+  let isValidating = true
+
+  if (res && (typeof res.then === 'function' || res instanceof Promise)) {
+    try {
+      data = await res
+    } catch (err) {
+      error = err
+    }
+  } else {
+    data = res
+  }
+
+  isValidating = false
+
+  const newData = { data, error, isValidating }
+  if (typeof data !== 'undefined') {
+    cache.set(key, newData)
+  }
+
+  return newData
+}
+
 const dataCache = new DataCache()
 const promisesCache = new DataCache()
 
@@ -30,8 +55,8 @@ const defaultConfig = {
   cache: dataCache,
   revalidateOnFocus: true,
   revalidateDebounce: 0,
-  dedupingInterval: 2000,
-  ttl: 60 * 60 * 1000,
+  dedupingInterval: 200000,
+  ttl: 0,
   onError: (_, __) => {},
 }
 
@@ -42,6 +67,7 @@ export const useSwr = (key, fn, config = {}) => {
 
   config = {
     ...defaultConfig,
+    ...config,
   }
 
   const keyRef = typeof key === 'function' ? key : ref(key)
@@ -58,9 +84,11 @@ export const useSwr = (key, fn, config = {}) => {
     const cacheItem = config.cache.get(keyVal, config.ttl)
     let newData = cacheItem && cacheItem.data
 
+    console.log('cacheItem', cacheItem)
+
     stateRef.isValidating = true
     if (newData) {
-      stateRef.data = newData
+      stateRef.data = newData.data
       stateRef.error = newData.error
     }
 
@@ -73,17 +101,20 @@ export const useSwr = (key, fn, config = {}) => {
       if (!promiseFromCache) {
         const newPromise = fn(keyVal)
         promisesCache.set(keyVal, newPromise)
-        try {
-          newData = await newPromise
-          stateRef.data = newData
-        } catch (err) {
-          stateRef.error = err
-          config.onError(err, keyVal)
+        newData = await mutate(keyVal, newPromise, config.cache)
+        if (typeof newData.data !== 'undefined') {
+          stateRef.data = newData.data
+        }
+        if (newData.error) {
+          stateRef.error = newData.error
+          config.onError(newData.error, keyVal)
         }
         stateRef.isValidating = false
       } else {
-        newData = await promiseFromCache.data
-        if (typeof newData.data !== 'undefined') {
+        console.log('has Promise cache')
+        newData = await mutate(keyVal, promiseFromCache.data, config.cache)
+        // console.log('newData', newData)
+        if (typeof newData !== 'undefined') {
           stateRef.data = newData.data
         }
         if (newData.error) {
@@ -103,12 +134,15 @@ export const useSwr = (key, fn, config = {}) => {
     } else {
       await trigger()
     }
+
+    promisesCache.delete(keyVal)
   }
 
   const timer = null
 
   onMounted(() => {
     const tick = async () => {}
+
     if (config.revalidateOnFocus) {
       document.addEventListener('visibilitychange', revalidate, false)
       window.addEventListener('focus', revalidate, false)
@@ -149,5 +183,7 @@ export const useSwr = (key, fn, config = {}) => {
   return {
     ...toRefs(stateRef),
     revalidate,
+    _cache: config.cache,
+    _promisesCache: promisesCache,
   }
 }
