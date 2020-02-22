@@ -55,7 +55,7 @@ const defaultConfig = {
   cache: dataCache,
   revalidateOnFocus: true,
   revalidateDebounce: 0,
-  dedupingInterval: 200000,
+  dedupingInterval: 2000,
   ttl: 0,
   onError: (_, __) => {},
 }
@@ -83,8 +83,6 @@ export const useSwr = (key, fn, config = {}) => {
     if (!isDocumentVisible) return
     const cacheItem = config.cache.get(keyVal, config.ttl)
     let newData = cacheItem && cacheItem.data
-
-    console.log('cacheItem', cacheItem)
 
     stateRef.isValidating = true
     if (newData) {

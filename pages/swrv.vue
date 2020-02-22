@@ -109,8 +109,7 @@ export default {
       (url) => fetch(url).then((res) => res.json()),
       {
         onError: () => console.log('error です'),
-        ttl: 360000,
-        cache: createStoreCache(root.$store, 360000),
+        // cache: createStoreCache(root.$store, 360000),
       }
     )
     // const { hello, count } = useSfample()
